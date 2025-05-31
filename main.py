@@ -213,6 +213,7 @@ class Game:
         
         # Game statistics
         self.start_time = pygame.time.get_ticks()
+        self.end_time = None  # Track when game ends
         self.total_jumps = 0
         self.powerups_collected = 0
         
@@ -243,6 +244,7 @@ class Game:
         self.score = 0
         self.highest_point = SCREEN_HEIGHT
         self.start_time = pygame.time.get_ticks()
+        self.end_time = None  # Track when game ends
         self.total_jumps = 0
         self.powerups_collected = 0
 
@@ -495,9 +497,13 @@ class Game:
 
         # Check game over conditions
         if self.player.y - self.camera_y > SCREEN_HEIGHT:
+            if not self.game_over:  # Only set end time on first game over
+                self.end_time = pygame.time.get_ticks()
             self.game_over = True
         # Check if player has fallen too far without hitting a platform
         elif self.player.is_falling and (self.player.y - self.player.fall_start_y) > MAX_FALL_DISTANCE:
+            if not self.game_over:  # Only set end time on first game over
+                self.end_time = pygame.time.get_ticks()
             self.game_over = True
 
     def draw_ui(self):
@@ -511,7 +517,10 @@ class Game:
         self.screen.blit(high_score_text, (10, 50))
         
         # Game time
-        game_time = (pygame.time.get_ticks() - self.start_time) // 1000
+        if self.end_time:
+            game_time = (self.end_time - self.start_time) // 1000
+        else:
+            game_time = (pygame.time.get_ticks() - self.start_time) // 1000
         time_text = self.small_font.render(f'Time: {game_time}s', True, WHITE)
         self.screen.blit(time_text, (10, 75))
         
@@ -588,7 +597,7 @@ class Game:
                 new_record_rect = new_record_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 10))
                 self.screen.blit(new_record_text, new_record_rect)
             
-            game_time = (pygame.time.get_ticks() - self.start_time) // 1000
+            game_time = (self.end_time - self.start_time) // 1000
             stats_text = self.small_font.render(f'Time: {game_time}s | Jumps: {self.total_jumps} | Power-ups: {self.powerups_collected}', True, WHITE)
             stats_rect = stats_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
             self.screen.blit(stats_text, stats_rect)
