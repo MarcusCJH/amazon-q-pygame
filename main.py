@@ -7,15 +7,17 @@ pygame.init()
 # Constants
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-GRAVITY = 0.8
-JUMP_SPEED = -15
-MOVE_SPEED = 5
+GRAVITY = 0.6  # Reduced gravity for higher, longer jumps
+JUMP_SPEED = -16  # Increased jump power
+MOVE_SPEED = 6  # Increased horizontal movement speed
 PLATFORM_WIDTH = 200  # Increased base platform width
 PLATFORM_HEIGHT = 20
 MAX_FALL_SPEED = 20  # Maximum falling speed
-MAX_FALL_DISTANCE = 300  # Maximum distance to fall before game over
-MIN_PLATFORM_WIDTH = 80  # Minimum platform width at highest points
-PLATFORM_WIDTH_SCALE = 0.95  # How much to reduce platform width as height increases
+MAX_FALL_DISTANCE = 400  # Increased fall distance tolerance
+MIN_PLATFORM_WIDTH = 90  # Smaller minimum for challenge at high levels
+PLATFORM_WIDTH_SCALE = 0.96  # More aggressive platform width reduction
+SAFE_HORIZONTAL_DISTANCE = 280  # Slightly reduced safe distance
+SAFE_VERTICAL_GAP = 75  # Increased maximum vertical gap for challenge
 
 # Colors
 WHITE = (255, 255, 255)
@@ -160,46 +162,133 @@ class Game:
         # Camera follows player
         self.camera_y = self.player.y - SCREEN_HEIGHT // 2
 
-        # Generate new platforms
-        while len(self.platforms) < 10:
-            x = random.randint(0, SCREEN_WIDTH - PLATFORM_WIDTH)
-            # Calculate time to reach maximum height: -v0/g
-            time_to_peak = -JUMP_SPEED / GRAVITY
-            # Maximum height reached: v0²/2g
-            max_height = (JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)
-            # Distance covered horizontally at max speed during the jump
-            horizontal_distance = MOVE_SPEED * time_to_peak * 2  # multiply by 2 for up and down journey
-
-            # Adjust max jump height based on horizontal movement capability
-            max_jump_height = max_height * 0.95  # 95% of theoretical maximum for safety
-            min_gap = 40  # Reduced minimum gap
-
-            # Calculate the next platform's y position
-            y = self.platforms[-1].y - random.randint(min_gap, int(max_jump_height))
-
-            # Calculate platform width based on height
-            # The higher we go, the smaller the platforms become
-            height_factor = (SCREEN_HEIGHT - y) / SCREEN_HEIGHT
-            platform_width = max(MIN_PLATFORM_WIDTH, 
-                               PLATFORM_WIDTH * (height_factor ** 2))
-
-            # Ensure horizontal distance is manageable
-            # If the previous platform is too far horizontally, place new one closer
-            prev_platform = self.platforms[-1]
-            if abs(x - prev_platform.rect.x) > horizontal_distance:
-                # Place platform within reachable horizontal distance
-                if x > prev_platform.rect.x:
-                    x = prev_platform.rect.x + random.randint(0, int(horizontal_distance))
-                else:
-                    x = prev_platform.rect.x - random.randint(0, int(horizontal_distance))
+        # Generate new platforms with improved reachability
+        # Calculate difficulty factor first
+        if len(self.platforms) > 0:
+            current_score = (SCREEN_HEIGHT - self.platforms[-1].y) // 10
+            difficulty_factor = min(1.0, current_score / 150.0)
+        else:
+            difficulty_factor = 0.0
             
-            # Ensure platform is fully on screen
-            x = max(0, min(x, SCREEN_WIDTH - platform_width))
-            self.platforms.append(Platform(x, y, platform_width))
+        # Fewer platforms at higher difficulty for more challenging gaps
+        max_platforms = max(6, 15 - int(difficulty_factor * 9))  # 15 at start, 6 at max difficulty
+        while len(self.platforms) < max_platforms:
+            prev_platform = self.platforms[-1]
+            
+            # Recalculate difficulty factor for this specific platform
+            current_score = (SCREEN_HEIGHT - prev_platform.y) // 10
+            difficulty_factor = min(1.0, current_score / 150.0)
+            
+            # Calculate safe vertical gap (much more aggressive)
+            base_min_gap = 30
+            base_max_gap = 60
+            # Increase gaps dramatically as score gets higher
+            min_gap = int(base_min_gap + difficulty_factor * 40)  # Can go up to 70
+            max_gap = int(base_max_gap + difficulty_factor * 60)  # Can go up to 120
+            max_gap = min(max_gap, 120)  # Allow larger gaps than SAFE_VERTICAL_GAP
+            
+            # Ensure min_gap never exceeds max_gap
+            min_gap = min(min_gap, max_gap - 10)  # Keep at least 10 pixel difference
+            
+            vertical_gap = random.randint(min_gap, max_gap)
+            
+            # Calculate next platform y position
+            y = prev_platform.y - vertical_gap
+            
+            # Calculate platform width with more aggressive shrinking
+            # At score 0: full width (200), at score 150+: minimum width (90)
+            width_reduction_factor = 1.0 - (difficulty_factor * 0.8)  # Reduce by up to 80%
+            platform_width = max(MIN_PLATFORM_WIDTH, 
+                               int(PLATFORM_WIDTH * width_reduction_factor))
+            
+            # Improved horizontal positioning with much more spread
+            prev_center = prev_platform.rect.centerx
+            
+            # Calculate horizontal range based on difficulty (much more aggressive)
+            base_range = SCREEN_WIDTH * 0.2   # Start more spread out
+            max_range = SCREEN_WIDTH * 0.8    # Can get extremely challenging
+            current_range = base_range + (max_range - base_range) * difficulty_factor
+            max_horizontal_offset = int(min(500, current_range))  # Convert to int and ensure it's capped at 500
+            
+            # Generate potential positions with extreme variation
+            potential_positions = []
+            
+            # At low heights, moderate spread. At high heights, extreme spread
+            if difficulty_factor < 0.2:  # Early game - moderate spread
+                spread_offset = random.randint(-100, 100)
+                x1 = prev_center + spread_offset - platform_width // 2
+                potential_positions.append(x1)
+                
+                wider_offset = random.randint(-160, 160)
+                x2 = prev_center + wider_offset - platform_width // 2
+                potential_positions.append(x2)
+                
+            elif difficulty_factor < 0.5:  # Mid game - wide spread
+                wide_offset = random.randint(-180, 180)
+                x1 = prev_center + wide_offset - platform_width // 2
+                potential_positions.append(x1)
+                
+                very_wide_offset = random.randint(-280, 280)
+                x2 = prev_center + very_wide_offset - platform_width // 2
+                potential_positions.append(x2)
+                
+            else:  # Late game - extreme spread
+                # Much wider spreads for high difficulty
+                extreme_offset = random.randint(-250, 250)
+                x1 = prev_center + extreme_offset - platform_width // 2
+                potential_positions.append(x1)
+                
+                massive_offset = random.randint(-400, 400)
+                x2 = prev_center + massive_offset - platform_width // 2
+                potential_positions.append(x2)
+                
+                # Force platforms to opposite sides of screen more often
+                if random.random() < 0.5:  # 50% chance
+                    if prev_center < SCREEN_WIDTH // 2:
+                        # Previous was on left, put new one on right
+                        far_right_x = random.randint(SCREEN_WIDTH - platform_width - 50, SCREEN_WIDTH - platform_width - 10)
+                        potential_positions.append(far_right_x)
+                    else:
+                        # Previous was on right, put new one on left
+                        far_left_x = random.randint(10, 50)
+                        potential_positions.append(far_left_x)
+            
+            # Add one extremely random position
+            max_offset = min(max_horizontal_offset, 450)
+            extreme_random_offset = random.randint(-max_offset, max_offset)
+            x3 = prev_center + extreme_random_offset - platform_width // 2
+            potential_positions.append(x3)
+            
+            # Choose the best position
+            best_x = None
+            best_score = -1
+            
+            for x in potential_positions:
+                # Clamp to screen bounds
+                x_clamped = max(0, min(x, SCREEN_WIDTH - platform_width))
+                
+                # Score based on platform visibility and reasonable distance
+                on_screen_ratio = 1.0
+                if x < 0:
+                    on_screen_ratio = max(0, (platform_width + x) / platform_width)
+                elif x + platform_width > SCREEN_WIDTH:
+                    on_screen_ratio = max(0, (SCREEN_WIDTH - x) / platform_width)
+                
+                # Distance penalty varies with difficulty
+                distance_penalty = abs(x_clamped + platform_width//2 - prev_center) / SCREEN_WIDTH
+                penalty_weight = 0.15 + difficulty_factor * 0.1  # Less penalty at higher levels
+                score = on_screen_ratio - distance_penalty * penalty_weight
+                
+                if score > best_score:
+                    best_score = score
+                    best_x = x_clamped
+            
+            # Add the new platform
+            self.platforms.append(Platform(best_x, y, platform_width))
 
         # Remove off-screen platforms
         self.platforms = [p for p in self.platforms
-                          if p.y - self.camera_y < SCREEN_HEIGHT + 100]
+                          if p.y - self.camera_y < SCREEN_HEIGHT + 200]  # Keep more platforms in memory
 
         # Check game over conditions
         if self.player.y - self.camera_y > SCREEN_HEIGHT:
