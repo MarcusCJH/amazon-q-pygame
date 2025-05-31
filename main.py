@@ -12,6 +12,8 @@ JUMP_SPEED = -15
 MOVE_SPEED = 5
 PLATFORM_WIDTH = 100
 PLATFORM_HEIGHT = 20
+MAX_FALL_SPEED = 20  # Maximum falling speed
+MAX_FALL_DISTANCE = 300  # Maximum distance to fall before game over
 
 # Colors
 WHITE = (255, 255, 255)
@@ -24,10 +26,24 @@ class Player:
         self.vel_x = 0
         self.vel_y = 0
         self.y = y  # Actual y position for camera tracking
+        self.fall_start_y = y  # Track where falling began
+        self.is_falling = False
 
     def update(self):
         # Apply gravity
         self.vel_y += GRAVITY
+        
+        # Limit fall speed
+        if self.vel_y > MAX_FALL_SPEED:
+            self.vel_y = MAX_FALL_SPEED
+
+        # Track falling state
+        if self.vel_y > 0:
+            if not self.is_falling:
+                self.is_falling = True
+                self.fall_start_y = self.y
+        else:
+            self.is_falling = False
 
         # Update position
         self.rect.x += self.vel_x
@@ -67,18 +83,24 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        # Initialize game objects
-        self.player = Player(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 100)
+        # Create initial platforms first
         self.platforms = []
         self.camera_y = 0
         self.score = 0
         self.highest_point = SCREEN_HEIGHT
 
-        # Create initial platforms
-        for i in range(10):
+        # Create initial platform at a fixed position for the player to start on
+        initial_platform = Platform(SCREEN_WIDTH // 2 - PLATFORM_WIDTH // 2, SCREEN_HEIGHT - 100)
+        self.platforms.append(initial_platform)
+
+        # Create additional platforms
+        for i in range(1, 10):
             x = random.randint(0, SCREEN_WIDTH - PLATFORM_WIDTH)
             y = SCREEN_HEIGHT - (i * 100)
             self.platforms.append(Platform(x, y))
+
+        # Initialize player on the first platform
+        self.player = Player(initial_platform.rect.centerx - 20, initial_platform.rect.top - 40)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -90,15 +112,25 @@ class Game:
         self.player.vel_x = (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * MOVE_SPEED
 
     def update(self):
+        # Store previous position before update
+        prev_y = self.player.rect.y
+        
         self.player.update()
 
         # Check platform collisions
         for platform in self.platforms:
+            # Calculate previous bottom position
+            prev_bottom = prev_y + self.player.rect.height
+            
             if (self.player.vel_y > 0 and  # Moving downward
+                    prev_bottom <= platform.rect.top and  # Was above platform in previous frame
                     self.player.rect.bottom >= platform.rect.top and
                     self.player.rect.bottom <= platform.rect.bottom and
                     self.player.rect.right >= platform.rect.left and
                     self.player.rect.left <= platform.rect.right):
+                # Adjust position to top of platform
+                self.player.y = platform.rect.top - self.player.rect.height
+                self.player.rect.bottom = platform.rect.top
                 self.player.vel_y = JUMP_SPEED
 
         # Update camera and score
@@ -119,8 +151,11 @@ class Game:
         self.platforms = [p for p in self.platforms
                           if p.y - self.camera_y < SCREEN_HEIGHT + 100]
 
-        # Check game over
+        # Check game over conditions
         if self.player.y - self.camera_y > SCREEN_HEIGHT:
+            self.running = False
+        # Check if player has fallen too far without hitting a platform
+        elif self.player.is_falling and (self.player.y - self.player.fall_start_y) > MAX_FALL_DISTANCE:
             self.running = False
 
     def draw(self):
