@@ -1,15 +1,20 @@
 import unittest
 import pygame
+import os
+import json
 from main import (
-    Game, Player, Platform, SCREEN_WIDTH, SCREEN_HEIGHT, 
+    Game, Player, Platform, PowerUp, SCREEN_WIDTH, SCREEN_HEIGHT, 
     MAX_FALL_DISTANCE, PLATFORM_WIDTH, MIN_PLATFORM_WIDTH,
-    SAFE_VERTICAL_GAP
+    SAFE_VERTICAL_GAP, POWERUP_DOUBLE_JUMP, POWERUP_BIG_PLATFORMS, POWERUP_SLOW_MOTION
 )
 
 class TestGame(unittest.TestCase):
     def setUp(self):
         pygame.init()
         self.game = Game()
+        # Clean up any existing high score file for testing
+        if os.path.exists("high_score.json"):
+            os.remove("high_score.json")
 
     def test_player_starts_on_platform(self):
         """Test that the player starts properly positioned above a platform"""
@@ -97,6 +102,166 @@ class TestGame(unittest.TestCase):
         # Check game is reset
         self.assertFalse(self.game.game_over)
         self.assertEqual(self.game.score, 0)
+
+    def test_pause_functionality(self):
+        """Test that the game can be paused and unpaused"""
+        # Initially not paused
+        self.assertFalse(self.game.paused)
+        
+        # Create pause event
+        pause_event = pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_p})
+        pygame.event.post(pause_event)
+        
+        # Handle the event
+        self.game.handle_events()
+        
+        # Check game is paused
+        self.assertTrue(self.game.paused)
+        
+        # Unpause
+        pygame.event.post(pause_event)
+        self.game.handle_events()
+        
+        # Check game is unpaused
+        self.assertFalse(self.game.paused)
+
+    def test_powerup_creation(self):
+        """Test that power-ups can be created with different types"""
+        # Test each power-up type
+        powerup_types = [POWERUP_DOUBLE_JUMP, POWERUP_BIG_PLATFORMS, POWERUP_SLOW_MOTION]
+        
+        for powerup_type in powerup_types:
+            powerup = PowerUp(100, 100, powerup_type)
+            self.assertEqual(powerup.type, powerup_type)
+            self.assertEqual(powerup.rect.x, 100)
+            self.assertEqual(powerup.rect.y, 100)
+
+    def test_powerup_collection(self):
+        """Test that power-ups can be collected and affect the player"""
+        # Create a power-up and add it to the game
+        powerup = PowerUp(self.game.player.rect.x, self.game.player.rect.y, POWERUP_DOUBLE_JUMP)
+        self.game.powerups.append(powerup)
+        
+        # Check initial state
+        initial_powerups_collected = self.game.powerups_collected
+        initial_double_jumps = self.game.player.double_jumps_left
+        
+        # Update game to trigger collision detection
+        self.game.update()
+        
+        # Check that power-up was collected
+        self.assertEqual(self.game.powerups_collected, initial_powerups_collected + 1)
+        self.assertGreater(self.game.player.double_jumps_left, initial_double_jumps)
+        self.assertEqual(len(self.game.powerups), 0)  # Power-up should be removed
+
+    def test_double_jump_powerup(self):
+        """Test double jump power-up functionality"""
+        # Give player double jump
+        self.game.player.double_jumps_left = 2
+        initial_vel_y = 5  # Player is falling
+        self.game.player.vel_y = initial_vel_y
+        
+        # Use double jump
+        self.game.player.jump()
+        
+        # Check that player jumped (negative velocity) and lost a double jump
+        self.assertLess(self.game.player.vel_y, initial_vel_y)
+        self.assertEqual(self.game.player.double_jumps_left, 1)
+
+    def test_big_platforms_powerup(self):
+        """Test big platforms power-up functionality"""
+        # Create a normal platform
+        platform = Platform(100, 100, 100, "normal")
+        
+        # Test without big platforms active
+        normal_width = platform.get_display_width(False)
+        self.assertEqual(normal_width, 100)
+        
+        # Test with big platforms active
+        big_width = platform.get_display_width(True)
+        self.assertGreater(big_width, normal_width)
+
+    def test_slow_motion_powerup(self):
+        """Test slow motion power-up functionality"""
+        # Give player slow motion
+        self.game.player.slow_motion_timer = 100
+        
+        # Test that gravity is reduced during slow motion
+        initial_vel_y = self.game.player.vel_y
+        self.game.player.update()
+        
+        # Velocity should increase more slowly due to reduced gravity
+        self.assertLess(self.game.player.vel_y - initial_vel_y, 0.6)  # Normal gravity is 0.6
+
+    def test_high_score_system(self):
+        """Test high score loading and saving"""
+        # Set a high score
+        self.game.score = 100
+        self.game.high_score = 100
+        self.game.save_high_score()
+        
+        # Create new game instance
+        new_game = Game()
+        
+        # Check that high score was loaded
+        self.assertEqual(new_game.high_score, 100)
+        
+        # Clean up
+        if os.path.exists("high_score.json"):
+            os.remove("high_score.json")
+
+    def test_platform_types(self):
+        """Test different platform types"""
+        # Test normal platform
+        normal_platform = Platform(100, 100, 150, "normal")
+        self.assertEqual(normal_platform.type, "normal")
+        
+        # Test special platform
+        special_platform = Platform(200, 200, 150, "special")
+        self.assertEqual(special_platform.type, "special")
+
+    def test_player_trail_effect(self):
+        """Test that player trail positions are tracked"""
+        initial_trail_length = len(self.game.player.trail_positions)
+        
+        # Update player to add trail positions
+        for _ in range(10):
+            self.game.player.update()
+        
+        # Check that trail positions are added but limited
+        self.assertGreater(len(self.game.player.trail_positions), initial_trail_length)
+        self.assertLessEqual(len(self.game.player.trail_positions), 5)  # Max trail length
+
+    def test_game_statistics(self):
+        """Test that game statistics are tracked correctly"""
+        initial_jumps = self.game.total_jumps
+        initial_powerups = self.game.powerups_collected
+        
+        # Simulate a jump
+        self.game.total_jumps += 1
+        
+        # Simulate power-up collection
+        self.game.powerups_collected += 1
+        
+        # Check statistics updated
+        self.assertEqual(self.game.total_jumps, initial_jumps + 1)
+        self.assertEqual(self.game.powerups_collected, initial_powerups + 1)
+
+    def test_powerup_spawn_chance(self):
+        """Test that power-ups spawn with appropriate probability"""
+        platform = Platform(100, 100, 150)
+        spawn_count = 0
+        
+        # Test multiple spawns to check probability
+        for _ in range(100):
+            self.game.powerups = []  # Clear existing power-ups
+            self.game.spawn_powerup(platform)
+            if len(self.game.powerups) > 0:
+                spawn_count += 1
+        
+        # Should spawn roughly 15% of the time (with some variance)
+        self.assertGreater(spawn_count, 5)  # At least 5%
+        self.assertLess(spawn_count, 35)    # At most 35%
 
     def test_difficulty_scaling(self):
         """Test that difficulty factor increases with score"""
@@ -228,6 +393,9 @@ class TestGame(unittest.TestCase):
         self.assertEqual(mid_difficulty, 0.5)
 
     def tearDown(self):
+        # Clean up any test files
+        if os.path.exists("high_score.json"):
+            os.remove("high_score.json")
         pygame.quit()
 
 if __name__ == '__main__':
