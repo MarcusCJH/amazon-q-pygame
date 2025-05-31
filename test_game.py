@@ -1,6 +1,6 @@
 import unittest
 import pygame
-from main import Game, Player, Platform, SCREEN_WIDTH, SCREEN_HEIGHT, MAX_FALL_DISTANCE
+from main import Game, Player, Platform, SCREEN_WIDTH, SCREEN_HEIGHT, MAX_FALL_DISTANCE, PLATFORM_WIDTH, MIN_PLATFORM_WIDTH
 
 class TestGame(unittest.TestCase):
     def setUp(self):
@@ -43,8 +43,43 @@ class TestGame(unittest.TestCase):
         # Update game
         self.game.update()
         
-        # Game should end due to excessive falling
-        self.assertFalse(self.game.running)
+        # Game should be in game over state
+        self.assertTrue(self.game.game_over)
+
+    def test_platform_size_scaling(self):
+        """Test that platforms get smaller as height increases"""
+        # Get first (bottom) platform
+        bottom_platform = self.game.platforms[0]
+        
+        # Get last (highest) platform
+        top_platform = self.game.platforms[-1]
+        
+        # Check that bottom platform is wider than top platform
+        self.assertGreater(bottom_platform.rect.width, top_platform.rect.width)
+        
+        # Check that platform widths are within bounds
+        self.assertGreaterEqual(bottom_platform.rect.width, MIN_PLATFORM_WIDTH)
+        self.assertLessEqual(bottom_platform.rect.width, PLATFORM_WIDTH)
+        self.assertGreaterEqual(top_platform.rect.width, MIN_PLATFORM_WIDTH)
+        self.assertLessEqual(top_platform.rect.width, PLATFORM_WIDTH)
+
+    def test_game_restart(self):
+        """Test that game can be restarted after game over"""
+        # Force game over
+        self.game.game_over = True
+        initial_score = self.game.score
+        
+        # Create restart event
+        restart_event = pygame.event.Event(pygame.KEYDOWN, {'key': pygame.K_r})
+        pygame.event.post(restart_event)
+        
+        # Handle the event
+        self.game.handle_events()
+        
+        # Check game is reset
+        self.assertFalse(self.game.game_over)
+        self.assertEqual(self.game.score, 0)
+        self.assertNotEqual(self.game.score, initial_score)
 
     def tearDown(self):
         pygame.quit()

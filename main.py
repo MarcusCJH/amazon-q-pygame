@@ -10,15 +10,18 @@ SCREEN_HEIGHT = 600
 GRAVITY = 0.8
 JUMP_SPEED = -15
 MOVE_SPEED = 5
-PLATFORM_WIDTH = 100
+PLATFORM_WIDTH = 200  # Increased base platform width
 PLATFORM_HEIGHT = 20
 MAX_FALL_SPEED = 20  # Maximum falling speed
 MAX_FALL_DISTANCE = 300  # Maximum distance to fall before game over
+MIN_PLATFORM_WIDTH = 80  # Minimum platform width at highest points
+PLATFORM_WIDTH_SCALE = 0.95  # How much to reduce platform width as height increases
 
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
+RED = (255, 0, 0)
 
 class Player:
     def __init__(self, x, y):
@@ -32,7 +35,7 @@ class Player:
     def update(self):
         # Apply gravity
         self.vel_y += GRAVITY
-        
+
         # Limit fall speed
         if self.vel_y > MAX_FALL_SPEED:
             self.vel_y = MAX_FALL_SPEED
@@ -65,8 +68,8 @@ class Player:
                                      self.rect.height))
 
 class Platform:
-    def __init__(self, x, y):
-        self.rect = pygame.Rect(x, y, PLATFORM_WIDTH, PLATFORM_HEIGHT)
+    def __init__(self, x, y, width):
+        self.rect = pygame.Rect(x, y, width, PLATFORM_HEIGHT)
         self.y = y  # Actual y position
 
     def draw(self, screen, camera_y):
@@ -82,7 +85,10 @@ class Game:
         pygame.display.set_caption("Endless Jumper")
         self.clock = pygame.time.Clock()
         self.running = True
+        self.game_over = False
+        self.init_game()
 
+    def init_game(self):
         # Create initial platforms first
         self.platforms = []
         self.camera_y = 0
@@ -90,14 +96,19 @@ class Game:
         self.highest_point = SCREEN_HEIGHT
 
         # Create initial platform at a fixed position for the player to start on
-        initial_platform = Platform(SCREEN_WIDTH // 2 - PLATFORM_WIDTH // 2, SCREEN_HEIGHT - 100)
+        initial_platform = Platform(SCREEN_WIDTH // 2 - PLATFORM_WIDTH // 2, 
+                                 SCREEN_HEIGHT - 100, 
+                                 PLATFORM_WIDTH)
         self.platforms.append(initial_platform)
 
         # Create additional platforms
         for i in range(1, 10):
             x = random.randint(0, SCREEN_WIDTH - PLATFORM_WIDTH)
             y = SCREEN_HEIGHT - (i * 100)
-            self.platforms.append(Platform(x, y))
+            # Calculate platform width based on height
+            platform_width = max(MIN_PLATFORM_WIDTH, 
+                               PLATFORM_WIDTH * (PLATFORM_WIDTH_SCALE ** i))
+            self.platforms.append(Platform(x, y, platform_width))
 
         # Initialize player on the first platform
         self.player = Player(initial_platform.rect.centerx - 20, initial_platform.rect.top - 40)
@@ -106,22 +117,30 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and self.game_over:
+                    # Restart game
+                    self.game_over = False
+                    self.init_game()
 
         # Handle keyboard input
         keys = pygame.key.get_pressed()
         self.player.vel_x = (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * MOVE_SPEED
 
     def update(self):
+        if self.game_over:
+            return
+
         # Store previous position before update
         prev_y = self.player.rect.y
-        
+
         self.player.update()
 
         # Check platform collisions
         for platform in self.platforms:
             # Calculate previous bottom position
             prev_bottom = prev_y + self.player.rect.height
-            
+
             if (self.player.vel_y > 0 and  # Moving downward
                     prev_bottom <= platform.rect.top and  # Was above platform in previous frame
                     self.player.rect.bottom >= platform.rect.top and
@@ -144,8 +163,39 @@ class Game:
         # Generate new platforms
         while len(self.platforms) < 10:
             x = random.randint(0, SCREEN_WIDTH - PLATFORM_WIDTH)
-            y = self.platforms[-1].y - random.randint(100, 200)
-            self.platforms.append(Platform(x, y))
+            # Calculate time to reach maximum height: -v0/g
+            time_to_peak = -JUMP_SPEED / GRAVITY
+            # Maximum height reached: v0²/2g
+            max_height = (JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)
+            # Distance covered horizontally at max speed during the jump
+            horizontal_distance = MOVE_SPEED * time_to_peak * 2  # multiply by 2 for up and down journey
+
+            # Adjust max jump height based on horizontal movement capability
+            max_jump_height = max_height * 0.95  # 95% of theoretical maximum for safety
+            min_gap = 40  # Reduced minimum gap
+
+            # Calculate the next platform's y position
+            y = self.platforms[-1].y - random.randint(min_gap, int(max_jump_height))
+
+            # Calculate platform width based on height
+            # The higher we go, the smaller the platforms become
+            height_factor = (SCREEN_HEIGHT - y) / SCREEN_HEIGHT
+            platform_width = max(MIN_PLATFORM_WIDTH, 
+                               PLATFORM_WIDTH * (height_factor ** 2))
+
+            # Ensure horizontal distance is manageable
+            # If the previous platform is too far horizontally, place new one closer
+            prev_platform = self.platforms[-1]
+            if abs(x - prev_platform.rect.x) > horizontal_distance:
+                # Place platform within reachable horizontal distance
+                if x > prev_platform.rect.x:
+                    x = prev_platform.rect.x + random.randint(0, int(horizontal_distance))
+                else:
+                    x = prev_platform.rect.x - random.randint(0, int(horizontal_distance))
+            
+            # Ensure platform is fully on screen
+            x = max(0, min(x, SCREEN_WIDTH - platform_width))
+            self.platforms.append(Platform(x, y, platform_width))
 
         # Remove off-screen platforms
         self.platforms = [p for p in self.platforms
@@ -153,10 +203,10 @@ class Game:
 
         # Check game over conditions
         if self.player.y - self.camera_y > SCREEN_HEIGHT:
-            self.running = False
+            self.game_over = True
         # Check if player has fallen too far without hitting a platform
         elif self.player.is_falling and (self.player.y - self.player.fall_start_y) > MAX_FALL_DISTANCE:
-            self.running = False
+            self.game_over = True
 
     def draw(self):
         self.screen.fill(BLACK)
@@ -170,6 +220,16 @@ class Game:
         font = pygame.font.Font(None, 36)
         score_text = font.render(f'Score: {self.score}', True, WHITE)
         self.screen.blit(score_text, (10, 10))
+
+        # Draw game over message and restart prompt
+        if self.game_over:
+            font = pygame.font.Font(None, 48)
+            game_over_text = font.render('Game Over!', True, RED)
+            restart_text = font.render('Press R to Restart', True, WHITE)
+            text_rect = game_over_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+            restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
+            self.screen.blit(game_over_text, text_rect)
+            self.screen.blit(restart_text, restart_rect)
 
         pygame.display.flip()
 
