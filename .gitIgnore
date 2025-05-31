@@ -1,0 +1,60 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.dll
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv local packages
+__pypackages__/
+
+# IntelliJ / PyCharm
+.idea/
+
+# Testing / coverage
+*.cover
+*.py,cover
+.coverage
+coverage.*
+.cache
+.nox/
+.pytest_cache/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# MacOS specific
+.DS_Store
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Pylint
+.pylint.d/
+
+# Others
+*.swp
+*.swo
+
+# VSCode (optional, if you sometimes open with VSCode)
+.vscode/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
