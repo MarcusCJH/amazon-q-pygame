@@ -39,15 +39,31 @@ class GameManager:
                         self.state = "MENU"
                 
                 elif self.state == "PLAYING" and self.game:
-                    self.game.handle_events()
-                    if self.game.game_over and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE and self.game.game_over:
                         self.state = "MENU"
+                    else:
+                        # Pass event to game for handling
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_r and self.game.game_over:
+                                self.game.game_over = False
+                                self.game.init_game()
+                            elif event.key == pygame.K_p and not self.game.game_over:
+                                self.game.paused = not self.game.paused
             
             if self.state == "MENU":
                 self.menu.draw()
             elif self.state == "SETTINGS":
                 self.settings.draw()
             elif self.state == "PLAYING" and self.game:
+                # Handle continuous key presses
+                if not self.game.paused and not self.game.game_over:
+                    keys = pygame.key.get_pressed()
+                    self.game.player.vel_x = (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * MOVE_SPEED
+                    
+                    if keys[pygame.K_UP] and self.game.player.double_jumps_left > 0:
+                        self.game.player.jump()
+                        self.game.total_jumps += 1
+                
                 self.game.update()
                 self.game.draw()
                 if not self.game.running:

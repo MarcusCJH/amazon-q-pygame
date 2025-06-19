@@ -86,10 +86,9 @@ class Game:
             keys = pygame.key.get_pressed()
             self.player.vel_x = (keys[pygame.K_RIGHT] - keys[pygame.K_LEFT]) * MOVE_SPEED
             
-                if keys[pygame.K_UP] and self.player.double_jumps_left > 0:
+            if keys[pygame.K_UP] and self.player.double_jumps_left > 0:
                 self.player.jump()
                 self.total_jumps += 1
-                # Skip sound for web compatibility
 
     def spawn_powerup(self, platform):
         if random.random() < 0.15:
