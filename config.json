@@ -1,0 +1,30 @@
+{
+    "game": {
+        "screen_width": 800,
+        "screen_height": 600,
+        "fps": 60
+    },
+    "physics": {
+        "gravity": 0.6,
+        "jump_speed": -16,
+        "move_speed": 6,
+        "max_fall_speed": 20,
+        "max_fall_distance": 400
+    },
+    "platforms": {
+        "width": 200,
+        "height": 20,
+        "min_width": 90,
+        "width_scale": 0.96
+    },
+    "difficulty": {
+        "score_threshold": 150,
+        "min_platforms": 6,
+        "max_platforms": 15
+    },
+    "powerups": {
+        "spawn_chance": 0.15,
+        "big_platforms_duration": 600,
+        "slow_motion_duration": 300
+    }
+}
